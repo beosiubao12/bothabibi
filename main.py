@@ -517,87 +517,18 @@ async def baucua_command(interaction: discord.Interaction):
     result_embed.set_footer(text="Ván chơi đã kết thúc.")
     await msg.edit(embed=result_embed, view=None)
 
-# ==========================================
-# 4. SÒNG TÀI XỈU
-# ==========================================
-active_bets = {}
-
-class BetModal(discord.ui.Modal):
-    def __init__(self, choice_name, choice_value, message_id):
-        super().__init__(title=f'Cược vào: {choice_name}')
-        self.choice_value = choice_value
-        self.choice_name = choice_name
-        self.message_id = message_id
-        self.bet_amount = discord.ui.TextInput(
-            label='Nhập số gold muốn cược',
-            style=discord.TextStyle.short,
-            placeholder='Ví dụ: 10000',
-            required=True,
-            max_length=7
-        )
-        self.add_item(self.bet_amount)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        try:
-            money = int(self.bet_amount.value)
-            if money <= 0: raise ValueError
-        except ValueError:
-            await interaction.response.send_message("⚠️ Số tiền cược không hợp lệ!", ephemeral=True)
-            return
-
-        user_id = interaction.user.id
-        current_bal = get_balance(user_id)
-        if current_bal < money:
-            await interaction.response.send_message(f"❌ **Ví không đủ tiền!** Bạn đang có **{current_bal:,} gold**.", ephemeral=True)
-            return
-
-        update_balance(user_id, -money)
-        if self.message_id not in active_bets:
-            active_bets[self.message_id] = []
-        
-        active_bets[self.message_id].append({
-            "user_id": user_id,
-            "username": interaction.user.display_name,
-            "choice_value": self.choice_value,
-            "choice_name": self.choice_name,
-            "money": money
-        })
-        await interaction.response.send_message(f"✅ Đã cược **{money:,} gold** vào cửa **{self.choice_name}**!", ephemeral=True)
-
-class TaiXiuUI(discord.ui.View):
-    def __init__(self, message_id):
-        super().__init__(timeout=None)
-        self.message_id = message_id
-        main_buttons = [
-            ("Xỉu (3-10)", discord.ButtonStyle.green, "xiu"),
-            ("Tài (11-18)", discord.ButtonStyle.green, "tai"),
-            ("Chẵn", discord.ButtonStyle.red, "chan"),
-            ("Lẻ", discord.ButtonStyle.red, "le")
-        ]
-        for label, style, val in main_buttons:
-            btn = discord.ui.Button(label=label, style=style, custom_id=f"btn_{val}", row=0)
-            btn.callback = self.make_callback(label, val)
-            self.add_item(btn)
-
-        for i in range(3, 19):
-            row = ((i - 3) // 5) + 1
-            btn = discord.ui.Button(label=f"Số {i}", style=discord.ButtonStyle.blurple, custom_id=f"btn_num_{i}", row=row)
-            btn.callback = self.make_callback(f"Số {i}", f"so_{i}")
-            self.add_item(btn)
-
-    def make_callback(self, choice_name, choice_value):
-        async def callback(interaction: discord.Interaction):
-            await interaction.response.send_modal(BetModal(choice_name, choice_value, self.message_id))
-        return callback
-
 @bot.tree.command(name="taixiu", description="Mở sòng tài xỉu giao diện VIP, lắc xúc xắc động cực đẹp")
 async def taixiu_command(interaction: discord.Interaction):
+    # 1. BẮT BUỘC PHẢI PHẢN HỒI NGAY LẬP TỨC ĐỂ TRÁNH LỖI 3 GIÂY CỦA DISCORD
+    await interaction.response.defer(thinking=True)
+
     # Kiểm tra cấu hình kênh Tài Xỉu
     config = config_collection.find_one({"guild_id": str(interaction.guild_id)})
     if config and config.get("taixiu_channel"):
         required_ch = int(config["taixiu_channel"])
         if interaction.channel.id != required_ch:
-            await interaction.response.send_message(f"❌ Bạn chỉ được chơi Tài Xỉu tại kênh <#{required_ch}>!", ephemeral=True)
+            # Vì đã defer() nên phải dùng followup.send khi trả về lỗi riêng tư
+            await interaction.followup.send(f"❌ Bạn chỉ được chơi Tài Xỉu tại kênh <#{required_ch}>!", ephemeral=True)
             return
 
     embed = discord.Embed(
@@ -610,8 +541,8 @@ async def taixiu_command(interaction: discord.Interaction):
         color=discord.Color.blurple()
     )
     
-    await interaction.response.send_message(embed=embed)
-    msg = await interaction.original_response()
+    # Gửi tin nhắn đầu tiên thông qua followup vì đã defer()
+    msg = await interaction.followup.send(embed=embed, wait=True)
     
     view = TaiXiuUI(msg.id)
     await msg.edit(view=view)
@@ -631,6 +562,7 @@ async def taixiu_command(interaction: discord.Interaction):
     c_2 = "<:2_:1537536744889651291>"
     c_3 = "<:3_:1537536722047467640>"
     c_4 = "<:4_:1537536698978934876>"
+    c_5 = "<:5_%3E1537536672655347742>" # Giữ nguyên emoji của bro
     c_5 = "<:5_:1537536672655347742>"
     c_6 = "<:6_:1537536622575358096>"
 
@@ -685,7 +617,8 @@ async def taixiu_command(interaction: discord.Interaction):
     
     result_embed.add_field(name="📝 TỔNG KẾT GIAO DỊCH:", value="\n".join(summary_results), inline=False)
     
-    await msg.edit(embed=result_embed, view=None, attachments=[])
+    # Sửa lại đoạn edit cuối cùng cho chuẩn cú pháp
+    await msg.edit(embed=result_embed, view=None)
 
 import os
 from dotenv import load_dotenv
