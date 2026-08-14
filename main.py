@@ -592,6 +592,7 @@ class TaiXiuUI(discord.ui.View):
 
 @bot.tree.command(name="taixiu", description="Mở sòng tài xỉu giao diện VIP, lắc xúc xắc động cực đẹp")
 async def taixiu_command(interaction: discord.Interaction):
+    await interaction.response.defer()
     # Kiểm tra cấu hình kênh Tài Xỉu
     config = config_collection.find_one({"guild_id": str(interaction.guild_id)})
     if config and config.get("taixiu_channel"):
@@ -644,6 +645,7 @@ async def taixiu_command(interaction: discord.Interaction):
         await asyncio.sleep(0.6)
         anim_embed = discord.Embed(title="🎲 ĐANG XÓC TÀI XỈU 🎲", description=frame, color=discord.Color.orange())
         await msg.edit(embed=anim_embed)
+        await interaction.followup.send("Kết quả tài xỉu đây...")
 
     # 1. TÍNH TOÁN KẾT QUẢ CHÍNH THỨC
     dice1, dice2, dice3 = random.randint(1, 6), random.randint(1, 6), random.randint(1, 6)
