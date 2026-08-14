@@ -517,9 +517,82 @@ async def baucua_command(interaction: discord.Interaction):
     result_embed.set_footer(text="Ván chơi đã kết thúc.")
     await msg.edit(embed=result_embed, view=None)
 
+# ==========================================
+# 4. SÒNG TÀI XỈU
+# ==========================================
+active_bets = {}
+
+class BetModal(discord.ui.Modal):
+    def __init__(self, choice_name, choice_value, message_id):
+        super().__init__(title=f'Cược vào: {choice_name}')
+        self.choice_value = choice_value
+        self.choice_name = choice_name
+        self.message_id = message_id
+        self.bet_amount = discord.ui.TextInput(
+            label='Nhập số gold muốn cược',
+            style=discord.TextStyle.short,
+            placeholder='Ví dụ: 10000',
+            required=True,
+            max_length=7
+        )
+        self.add_item(self.bet_amount)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            money = int(self.bet_amount.value)
+            if money <= 0: raise ValueError
+        except ValueError:
+            await interaction.response.send_message("⚠️ Số tiền cược không hợp lệ!", ephemeral=True)
+            return
+
+        user_id = interaction.user.id
+        current_bal = get_balance(user_id)
+        if current_bal < money:
+            await interaction.response.send_message(f"❌ **Ví không đủ tiền!** Bạn đang có **{current_bal:,} gold**.", ephemeral=True)
+            return
+
+        update_balance(user_id, -money)
+        if self.message_id not in active_bets:
+            active_bets[self.message_id] = []
+       
+        active_bets[self.message_id].append({
+            "user_id": user_id,
+            "username": interaction.user.display_name,
+            "choice_value": self.choice_value,
+            "choice_name": self.choice_name,
+            "money": money
+        })
+        await interaction.response.send_message(f"✅ Đã cược **{money:,} gold** vào cửa **{self.choice_name}**!", ephemeral=True)
+
+class TaiXiuUI(discord.ui.View):
+    def __init__(self, message_id):
+        super().__init__(timeout=None)
+        self.message_id = message_id
+        main_buttons = [
+            ("Xỉu (3-10)", discord.ButtonStyle.green, "xiu"),
+            ("Tài (11-18)", discord.ButtonStyle.green, "tai"),
+            ("Chẵn", discord.ButtonStyle.red, "chan"),
+            ("Lẻ", discord.ButtonStyle.red, "le")
+        ]
+        for label, style, val in main_buttons:
+            btn = discord.ui.Button(label=label, style=style, custom_id=f"btn_{val}", row=0)
+            btn.callback = self.make_callback(label, val)
+            self.add_item(btn)
+
+        for i in range(3, 19):
+            row = ((i - 3) // 5) + 1
+            btn = discord.ui.Button(label=f"Số {i}", style=discord.ButtonStyle.blurple, custom_id=f"btn_num_{i}", row=row)
+            btn.callback = self.make_callback(f"Số {i}", f"so_{i}")
+            self.add_item(btn)
+
+    def make_callback(self, choice_name, choice_value):
+        async def callback(interaction: discord.Interaction):
+            await interaction.response.send_modal(BetModal(choice_name, choice_value, self.message_id))
+        return callback
+
 @bot.tree.command(name="taixiu", description="Mở sòng tài xỉu giao diện VIP, lắc xúc xắc động cực đẹp")
 async def taixiu_command(interaction: discord.Interaction):
-    # 1. BẮT BUỘC PHẢI PHẢN HỒI NGAY LẬP TỨC ĐỂ TRÁNH LỖI 3 GIÂY CỦA DISCORD
+    # Thêm dòng defer này để chống lỗi 3 giây của Discord khi check database
     await interaction.response.defer(thinking=True)
 
     # Kiểm tra cấu hình kênh Tài Xỉu
@@ -527,7 +600,6 @@ async def taixiu_command(interaction: discord.Interaction):
     if config and config.get("taixiu_channel"):
         required_ch = int(config["taixiu_channel"])
         if interaction.channel.id != required_ch:
-            # Vì đã defer() nên phải dùng followup.send khi trả về lỗi riêng tư
             await interaction.followup.send(f"❌ Bạn chỉ được chơi Tài Xỉu tại kênh <#{required_ch}>!", ephemeral=True)
             return
 
@@ -540,10 +612,10 @@ async def taixiu_command(interaction: discord.Interaction):
                     "⏳ **Trò chơi bắt đầu đếm ngược 30 giây!**",
         color=discord.Color.blurple()
     )
-    
-    # Gửi tin nhắn đầu tiên thông qua followup vì đã defer()
+   
+    # Dùng followup.send vì đã defer ở trên để lấy message gốc chính xác
     msg = await interaction.followup.send(embed=embed, wait=True)
-    
+   
     view = TaiXiuUI(msg.id)
     await msg.edit(view=view)
 
@@ -562,7 +634,6 @@ async def taixiu_command(interaction: discord.Interaction):
     c_2 = "<:2_:1537536744889651291>"
     c_3 = "<:3_:1537536722047467640>"
     c_4 = "<:4_:1537536698978934876>"
-    c_5 = "<:5_%3E1537536672655347742>" # Giữ nguyên emoji của bro
     c_5 = "<:5_:1537536672655347742>"
     c_6 = "<:6_:1537536622575358096>"
 
@@ -586,7 +657,7 @@ async def taixiu_command(interaction: discord.Interaction):
 
     # 3. TÍNH TOÁN TIỀN THẮNG THUA CỦA NGƯỜI CHƠI
     bets_in_this_game = active_bets.get(msg.id, [])
-    
+   
     if msg.id in active_bets: del active_bets[msg.id]
 
     # 4. TẠO TỔNG KẾT CHI TIẾT (NGƯỜI CƯỢC, CỬA, THẮNG/THUA)
@@ -598,7 +669,7 @@ async def taixiu_command(interaction: discord.Interaction):
             user_id = bet["user_id"]
             choice = bet["choice_value"]
             money = bet["money"]
-            
+           
             win = (choice == "tai" and is_tai) or (choice == "xiu" and not is_tai) or \
                   (choice == "chan" and total % 2 == 0) or (choice == "le" and total % 2 != 0) or \
                   (choice.startswith("so_") and total == int(choice.split("_")[1]))
@@ -611,15 +682,13 @@ async def taixiu_command(interaction: discord.Interaction):
             else:
                 summary_results.append(f"❌ <@{user_id}>: Cược **{bet['choice_name']}** ({money:,} 🪙) ➔ **Thua {money:,} 🪙**")
 
-    # 5. HIỂN THỊ KẾT QUẢ 
+    # 5. HIỂN THỊ KẾT QUẢ
     result_embed = discord.Embed(title="🎲 KẾT QUẢ HABIBI 🎲", color=discord.Color.gold())
     result_embed.description = f"**Kết quả: {dice1} - {dice2} - {dice3} = {total}**\n📊 **{tai_xiu_str}** | **{chan_le_str}**"
-    
+   
     result_embed.add_field(name="📝 TỔNG KẾT GIAO DỊCH:", value="\n".join(summary_results), inline=False)
-    
-    # Sửa lại đoạn edit cuối cùng cho chuẩn cú pháp
-    await msg.edit(embed=result_embed, view=None)
-
+   
+    await msg.edit(embed=result_embed, view=None, attachments=[])
 import os
 from dotenv import load_dotenv
 
