@@ -614,10 +614,10 @@ async def taixiu_command(interaction: discord.Interaction):
     )
    
     # Dùng followup.send vì đã defer ở trên để lấy message gốc chính xác
-    msg = await interaction.followup.send(embed=embed, wait=True)
+    msg = await interaction.followup.send(embed=embed, view=TaiXiuUI(0), wait=True)
    
     view = TaiXiuUI(msg.id)
-    await msg.edit(view=view)
+    await msg.edit(embed=embed, view=view)
 
     for t in range(30, 0, -1):
         embed.set_footer(text=f"⏳ Thời gian đặt cược còn lại: {t} giây...")
