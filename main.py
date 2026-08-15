@@ -6,31 +6,13 @@ import discord
 from discord import app_commands 
 from discord.ext import commands
 from pymongo import MongoClient
-from flask import Flask
-from threading import Thread
+
 
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-app = Flask('')
 
-@app.route('/')
-def home():
-    return "Bot HabibI is online and running!"
-
-def run_web():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.5.0.0', port=port) # Hoặc host='0.0.0.0'
-
-def keep_alive():
-    t = Thread(target=run_web)
-    t.start()
-
-# Gọi hàm này trước dòng bot.run(TOKEN) của bro
-if __name__ == "__main__":
-    keep_alive()
-    bot.run(os.getenv("DISCORD_TOKEN"))
 # ==========================================
 # KHO TỪ ĐIỂN TIẾNG VIỆT
 # ==========================================
