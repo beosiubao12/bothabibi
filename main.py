@@ -11,6 +11,24 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot HabibI is online and running!"
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.5.0.0', port=port) # Hoặc host='0.0.0.0'
+
+def keep_alive():
+    t = Thread(target=run_web)
+    t.start()
+
+# Gọi hàm này trước dòng bot.run(TOKEN) của bro
+if __name__ == "__main__":
+    keep_alive()
+    bot.run(os.getenv("DISCORD_TOKEN"))
 # ==========================================
 # KHO TỪ ĐIỂN TIẾNG VIỆT
 # ==========================================
@@ -566,7 +584,7 @@ class BetModal(discord.ui.Modal):
 
 class TaiXiuUI(discord.ui.View):
     def __init__(self, message_id):
-        super().__init__(timeout=None)
+        super().__init__(timeout=30)  # Chỉnh lại timeout 30 giây khớp với thời gian đếm ngược của game
         self.message_id = message_id
         main_buttons = [
             ("Xỉu (3-10)", discord.ButtonStyle.green, "xiu"),
@@ -575,13 +593,12 @@ class TaiXiuUI(discord.ui.View):
             ("Lẻ", discord.ButtonStyle.red, "le")
         ]
         for label, style, val in main_buttons:
-            btn = discord.ui.Button(label=label, style=style, custom_id=f"btn_{val}", row=0)
+            btn = discord.ui.Button(label=label, style=style, custom_id=f"btn_{val}")
             btn.callback = self.make_callback(label, val)
             self.add_item(btn)
 
         for i in range(3, 19):
-            row = ((i - 3) // 5) + 1
-            btn = discord.ui.Button(label=f"Số {i}", style=discord.ButtonStyle.blurple, custom_id=f"btn_num_{i}", row=row)
+            btn = discord.ui.Button(label=f"Số {i}", style=discord.ButtonStyle.blurple, custom_id=f"btn_num_{i}")
             btn.callback = self.make_callback(f"Số {i}", f"so_{i}")
             self.add_item(btn)
 
@@ -592,7 +609,7 @@ class TaiXiuUI(discord.ui.View):
 
 @bot.tree.command(name="taixiu", description="Mở sòng tài xỉu giao diện VIP, lắc xúc xắc động cực đẹp")
 async def taixiu_command(interaction: discord.Interaction):
-    # Thêm dòng defer này để chống lỗi 3 giây của Discord khi check database
+    # Defer chống lỗi 3 giây
     await interaction.response.defer(thinking=True)
 
     # Kiểm tra cấu hình kênh Tài Xỉu
@@ -613,15 +630,17 @@ async def taixiu_command(interaction: discord.Interaction):
         color=discord.Color.blurple()
     )
    
-    # Dùng followup.send vì đã defer ở trên để lấy message gốc chính xác
-    msg = await interaction.followup.send(embed=embed, view=TaiXiuUI(0), wait=True)
+    # Tạo view tạm thời để gửi kèm nút lên luôn ngay từ câu lệnh đầu tiên của followup
+    temp_view = TaiXiuUI(0)
+    msg = await interaction.followup.send(embed=embed, view=temp_view, wait=True)
    
+    # Cập nhật lại view chính thức nhận đúng message id của tin nhắn
     view = TaiXiuUI(msg.id)
     await msg.edit(embed=embed, view=view)
 
     for t in range(30, 0, -1):
         embed.set_footer(text=f"⏳ Thời gian đặt cược còn lại: {t} giây...")
-        await msg.edit(embed=embed)
+        await msg.edit(embed=embed, view=view)
         await asyncio.sleep(1)
 
     for child in view.children:
