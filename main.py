@@ -20,7 +20,7 @@ def home():
     return "Bot HabibI is online and running!"
 
 def run_web():
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host='0.5.0.0', port=port) # Hoặc host='0.0.0.0'
 
 def keep_alive():
