@@ -6,6 +6,8 @@ import discord
 from discord import app_commands 
 from discord.ext import commands
 from pymongo import MongoClient
+from flask import Flask
+from threading import Thread
 
 intents = discord.Intents.default()
 intents.message_content = True
